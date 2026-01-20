@@ -1,0 +1,4 @@
+myvenv
+test.py
+.env
+__pycache__
