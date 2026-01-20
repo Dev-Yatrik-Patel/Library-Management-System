@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, asc, desc
 
 from app.core.database import get_db
 from app.models.book import Book
@@ -21,8 +22,49 @@ def create_book(book: BookCreate, db: Session = Depends(get_db)):
     return db_book_obj
 
 @router.get("/", response_model=list[BookResponse], status_code=status.HTTP_200_OK)
-def get_books(db: Session = Depends(get_db)):
-    return db.query(Book).all()
+def get_books(
+    search: str | None = Query(None, description = "Search a book with book name or ISBN")
+    ,in_stock: bool | None = Query(None, description = "Filter books by stock > 0")
+    ,sort_by: str = Query("name", description="Sort by name or stock") 
+    ,order: str = Query("asc", description="asc or desc")
+    ,page: int = Query(1, ge=1)
+    ,limit: int = Query(10, ge=1, le=100)
+    ,db: Session = Depends(get_db)
+    ):
+    
+    query = db.query(Book)
+    
+    # searching 
+    if search:
+        query = query.filter( or_ 
+                             (
+                                 Book.name.ilike(f"%{search}%"),
+                                 Book.isbn.ilike(f"%{search}%")
+                             )
+                            )
+    # in stock filter
+    if in_stock is True:
+        query = query.filter(Book.stock > 0) 
+    
+    # sorting column
+    if sort_by == "stock":
+        sort_column = Book.stock
+    else:
+        sort_column = Book.name
+        
+    # sorting order 
+    if order == "desc":
+        query = query.order_by(desc(sort_column))
+    else:
+        query = query.order_by(asc(sort_column))
+    
+    # pagination 
+    offset = (page - 1) * limit
+    
+    # final filtering
+    books = query.offset(offset).limit(limit).all()
+    
+    return books
 
 @router.get("/{book_id}",response_model=BookResponse, status_code = status.HTTP_200_OK)
 def get_book_by_id(bookid : int, db: Session = Depends(get_db)):
