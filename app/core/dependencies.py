@@ -4,8 +4,6 @@ from app.models.user import User
 
 def require_roles(*allowed_roles: str):
     def role_checker(current_user: User = Depends(get_current_user)):
-        print(current_user.role.name)
-        print(allowed_roles)
         if current_user.role.name not in allowed_roles:
             raise HTTPException(
                 status_code= status.HTTP_401_UNAUTHORIZED,
