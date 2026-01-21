@@ -5,10 +5,14 @@ from jose import jwt, JWTError
 
 from app.core.database import get_db
 from app.models.user import User
-from app.utils.security import verify_password, hash_password, create_access_token
+from app.models.refresh_token import RefreshToken
+
+from app.utils.security import verify_password, create_access_token, create_refresh_token, refresh_token_expiry
+from app.schemas.auth import RefreshTokenRequest
 
 import os
 from dotenv import load_dotenv, find_dotenv
+from datetime import datetime
 
 load_dotenv(find_dotenv())
 SECRET_KEY = os.getenv("SECRET_KEY","secret")
@@ -65,8 +69,19 @@ def login(
         data = {"sub": str(user.id)}
     )
     
+    refresh_token_value = create_refresh_token()
+    refresh_token = RefreshToken(
+        user_id = user.id,
+        token = refresh_token_value,
+        expires_at = refresh_token_expiry()
+    )
+    
+    db.add(refresh_token)
+    db.commit()
+    
     return{
         "access_token" : access_token,
+        "refresh_token" : refresh_token_value,
         "token_type": "bearer"
     }
 
@@ -80,3 +95,24 @@ def read_me(current_user: User = Depends(get_current_user)):
     }
 
 
+@router.post("/refresh")
+def refresh_access_token(
+    data: RefreshTokenRequest,
+    db: Session = Depends(get_db)
+):
+    token_record = db.query(RefreshToken).filter(RefreshToken.token == data.refresh_token, RefreshToken.is_revoked == False).first()
+    
+    if not token_record:
+        raise HTTPException(status_code=401, detail="Invalid refresh token!")
+    
+    if token_record.expires_at < datetime.now():
+        raise HTTPException(status_code=401, detail="Invalid refresh token!")
+    
+    access_token = create_access_token(
+        {"sub": str(token_record.user_id)}
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }

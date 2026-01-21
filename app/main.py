@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from app.core.database import Base, engine
 
-from app.models import book,loan,role,user
+from app.models import book,loan,role,user,refresh_token
 from app.api import books, auth, users, loans
 
 app = FastAPI(title = "Library Management System")
