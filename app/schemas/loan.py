@@ -12,6 +12,8 @@ class LoanResponse(BaseModel):
     book_id : int
     borrow_issue_date : date
     due_date : date
+    returned_at : date | None 
+    is_active: bool
     
     class Config:
         from_attributes = True 

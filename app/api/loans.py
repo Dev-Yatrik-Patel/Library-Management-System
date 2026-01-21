@@ -6,6 +6,8 @@ from typing import List
 from app.schemas.loan import LoanCreate, LoanResponse
 from app.api.auth import get_current_user
 from app.core.database import get_db
+from app.core.dependencies import require_roles
+from app.core.roles import Roles 
 from app.models.loan import Loan
 from app.models.user import User
 from app.models.book import Book
@@ -29,7 +31,8 @@ def borrow_book(loan: LoanCreate,
     
     existing_loan = db.query(Loan).filter(
         Loan.book_id == loan.book_id,
-        Loan.user_id == current_user.id
+        Loan.user_id == current_user.id,
+        Loan.is_active == True
     ).first()
     
     if existing_loan:
@@ -54,7 +57,7 @@ def borrow_book(loan: LoanCreate,
 def return_book(loan_id : int,
                 db: Session = Depends(get_db),
                 current_user: User = Depends(get_current_user)):
-    loan = db.query(Loan).filter(Loan.id == loan_id).first()
+    loan = db.query(Loan).filter(Loan.id == loan_id, Loan.is_active == True).first()
     
     if not loan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Loan not found!")
@@ -63,14 +66,27 @@ def return_book(loan_id : int,
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can not return this book!")
 
     book = db.query(Book).filter(loan.book_id == Book.id).first()
+    
+    loan.is_active = False
+    loan.returned_at = date.today()
     book.stock += 1
     
-    db.delete(loan)
     db.commit()
     
     return {"message": "Book return successfully!"}
 
 @router.get("/me", response_model=List[LoanResponse])
-def my_loans(db: Session = Depends(get_db),
+def my_active_loans(db: Session = Depends(get_db),
+             current_user: User = Depends(get_current_user)):
+    return db.query(Loan).filter(current_user.id == Loan.user_id, Loan.is_active == True).all()
+
+@router.get("/history", response_model=List[LoanResponse])
+def my_loan_history(db: Session = Depends(get_db),
              current_user: User = Depends(get_current_user)):
     return db.query(Loan).filter(current_user.id == Loan.user_id).all()
+
+@router.get("/user/{user_id}",
+            response_model=List[LoanResponse],
+            dependencies=[Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))])
+def user_loan_history(user_id: int, db: Session = Depends(get_db) ):
+    return db.query(Loan).filter(Loan.user_id == user_id).all()
