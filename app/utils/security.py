@@ -33,13 +33,13 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
 
 # token = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
 
-# print(token)
+# print(token) # eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZXhwIjoxNzY4OTkxMzI3fQ.RUgXB_x_T0Bw5DQjrw2cglmTT8FllxIZLKVjFwBrOG4
 
 # final_dict = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
 
 # print('*'*30)
-# print(final_dict)
+# print(final_dict) # {'sub': '1', 'exp': 1768991327}
 
-# print(pwd_context.verify("test1234","$2b$12$kIVsVg78Su98CQn41An5KOdazXgL2JO283il7fXZOayX44VmH.PPO"))
+# print(pwd_context.verify("test1234","$2b$12$kIVsVg78Su98CQn41An5KOdazXgL2JO283il7fXZOayX44VmH.PPO")) # True
 
 ##########################################################################################################################################

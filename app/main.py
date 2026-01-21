@@ -19,4 +19,3 @@ def home():
 @app.get("/health")
 def health_check():
     return { "message" : "Library app is running!"}
-

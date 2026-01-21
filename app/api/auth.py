@@ -52,18 +52,14 @@ def login(
 ):
     user = db.query(User).filter(User.email == form_data.username).first()
     
-    print('*'*30)
-    print(form_data.password) # test1234
-    print('*'*30)
-    print(user.password_hash) # $2b$12$kIVsVg78Su98CQn41An5KOdazXgL2JO283il7fXZOayX44VmH.PPO
-    print('*'*30)
+    # form_data.password => test1234
+    # user.password_hash => $2b$12$kIVsVg78Su98CQn41An5KOdazXgL2JO283il7fXZOayX44VmH.PPO
     
     if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(
             status_code = status.HTTP_401_UNAUTHORIZED,
             detail = "Invalid email or password"
         )
-
     
     access_token = create_access_token(
         data = {"sub": str(user.id)}
