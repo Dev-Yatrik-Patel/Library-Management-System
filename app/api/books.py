@@ -5,10 +5,15 @@ from sqlalchemy import or_, asc, desc
 from app.core.database import get_db
 from app.models.book import Book
 from app.schemas.book import BookCreate, BookUpdate, BookResponse
+from app.core.dependencies import require_roles
+from app.core.roles import Roles
 
 router = APIRouter(prefix="/books", tags=["Books"])
 
-@router.post("/", response_model=BookResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", 
+            response_model=BookResponse, 
+            status_code=status.HTTP_201_CREATED,
+            dependencies= [Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))])
 def create_book(book: BookCreate, db: Session = Depends(get_db)):
     db_book_obj = Book(
         name = book.name,
@@ -74,7 +79,9 @@ def get_book_by_id(bookid : int, db: Session = Depends(get_db)):
                             detail = "Book not Found!")
     return book
 
-@router.put("/{book_id}", response_model=BookUpdate )
+@router.put("/{book_id}", 
+            response_model=BookUpdate,
+            dependencies= [Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))] )
 def update_book_by_id(bookid : int,
                       bookobj : BookUpdate,
                       db: Session = Depends(get_db)):
@@ -94,7 +101,8 @@ def update_book_by_id(bookid : int,
     
     return book
 
-@router.delete("/{book_id}")
+@router.delete("/{book_id}",
+               dependencies= [Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))])
 def delete_book(bookid : int,
                 db: Session = Depends(get_db)):
     
@@ -107,4 +115,4 @@ def delete_book(bookid : int,
     db.delete(book)
     db.commit()
     
-    return None
+    return {"message": "Book Deleted!"}

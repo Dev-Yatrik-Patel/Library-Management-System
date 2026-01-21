@@ -6,11 +6,16 @@ from app.models.user import User
 from app.models.role import Role
 from app.schemas.user import UserCreate, UserResponse
 from app.utils.security import hash_password
+from app.core.roles import Roles
+from app.core.dependencies import require_roles
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
-@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", 
+             response_model=UserResponse, 
+             status_code=status.HTTP_201_CREATED,
+             dependencies= [ Depends(require_roles(Roles.ADMIN)) ] )
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
     # Check if email already exists
     existing_user = db.query(User).filter(User.email == user.email).first()
