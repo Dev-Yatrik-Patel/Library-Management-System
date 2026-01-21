@@ -76,7 +76,13 @@ def login(
         expires_at = refresh_token_expiry()
     )
     
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == user.id,
+        RefreshToken.is_revoked == False
+    ).update({"is_revoked": True})
+    
     db.add(refresh_token)
+
     db.commit()
     
     return{
