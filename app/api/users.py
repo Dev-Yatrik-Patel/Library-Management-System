@@ -1,11 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from datetime import datetime
+from typing import List
 
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.utils.security import hash_password
+from app.api.auth import get_current_user
 
 from app.models.user import User
 from app.models.role import Role
+from app.models.loan import Loan
+from app.models.refresh_token import RefreshToken
 
 from app.core.roles import Roles
 from app.core.dependencies import require_roles
@@ -14,16 +19,66 @@ from app.core.database import get_db
 from app.exceptions.book import BookNotFound, BookOutOfStock
 from app.exceptions.auth import AuthenticationError, AuthorizationError
 from app.exceptions.loan import AlreadyBorrowed, InvalidLoanOperation, LoanNotFound
+from app.exceptions.user import UserNotFound,UserLoanPending,UserEmailAlreadyExists
 
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
+@router.get("/me",response_model=UserResponse) 
+def get_my_info(current_user: User = Depends(get_current_user)):
+    return current_user
+
+@router.put("/me",response_model=UserResponse)
+def update_my_profile(userupdateobj: UserUpdate, db: Session = Depends(get_db), current_user:User =  Depends(get_current_user)):
+    
+    updated_data = userupdateobj.model_dump(exclude_unset=True)
+    
+    if "email" in updated_data:
+        exists = db.query(User).filter(
+            User.email == updated_data["email"],
+            User.id != current_user.id
+        ).first()
+        if exists:
+            raise UserEmailAlreadyExists("Email already in use")
+    
+    for k,v in updated_data.items():
+        setattr(current_user,k,v)
+    
+    current_user.updated_at = datetime.now()
+    
+    db.commit()
+    db.refresh(current_user)
+    
+    return current_user
+
+@router.delete("/me")
+def delete_profile(
+    db: Session = Depends(get_db),
+    current_user: User =Depends(get_current_user)
+):
+    # checking the loan history of the user before removing
+    loans_history = db.query(Loan).filter(Loan.user_id == current_user.id, Loan.is_active == True).first()
+    
+    if loans_history:
+        raise UserLoanPending("Pending load detected! Action can't be perfomed.")
+    
+    # soft delete the user
+    current_user.is_active = False # db.delete(user)
+    
+    # revoking the refresh tokens 
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == current_user.id,
+        RefreshToken.is_revoked == False
+    ).update({"is_revoked": True},synchronize_session=False)
+    
+    db.commit()
+    return {"message": "Account deleted"}
+
 @router.post("/", 
              response_model=UserResponse, 
-             status_code=status.HTTP_201_CREATED,
-             dependencies= [ Depends(require_roles(Roles.ADMIN)) ] )
-def create_user(user: UserCreate, db: Session = Depends(get_db)):
+             status_code=status.HTTP_201_CREATED)
+def create_user(user: UserCreate, db: Session = Depends(get_db), _= Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))):
     # Check if email already exists
     existing_user = db.query(User).filter(User.email == user.email).first()
     if existing_user:
@@ -47,3 +102,76 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     db.refresh(db_user)
 
     return db_user
+
+@router.get("/", 
+             response_model=List[UserResponse], 
+             status_code=status.HTTP_200_OK)
+def get_all_users(db: Session = Depends(get_db),_= Depends(require_roles(Roles.ADMIN))):
+    return db.query(User).filter(User.is_active==True).all()
+
+@router.get("/{userid}", 
+             response_model=UserResponse, 
+             status_code=status.HTTP_200_OK)
+def get_user_by_id(userid: int, db:Session = Depends(get_db),_= Depends(require_roles(Roles.ADMIN))):
+    
+    user= db.query(User).filter(User.id == userid,User.is_active==True).first()
+    
+    if not user:
+        raise UserNotFound("User not Found!")        
+    
+    return user
+
+@router.put("/{userid}", response_model=UserResponse)
+def update_user_by_id(userid: int, updateuserobj: UserUpdate, db: Session = Depends(get_db), _=Depends(require_roles(Roles.ADMIN))):
+    
+    user = db.query(User).filter(User.id == userid,User.is_active==True).first()
+    
+    if not user:
+        raise UserNotFound("User not Found!")        
+    
+    updated_data = updateuserobj.model_dump(exclude_unset=True)
+    if "email" in updated_data:
+        exists = db.query(User).filter(
+            User.email == updated_data["email"],
+            User.id != user.id
+        ).first()
+        if exists:
+            raise UserEmailAlreadyExists("Email already in use")
+    
+    for k,v in updated_data.items():
+        setattr(user,k,v)
+    
+    user.updated_at = datetime.now()
+    
+    db.commit()
+    db.refresh(user)
+    
+    return user
+
+@router.delete("/{userid}")
+def delete_user(userid: int, db:Session = Depends(get_db), _=Depends(require_roles(Roles.ADMIN))):
+    
+    user = db.query(User).filter(User.id == userid,User.is_active==True).first()
+    
+    if not user:
+        raise UserNotFound("User not Found!")
+    
+    # checkin the loan history of the user before removing
+    loans_history = db.query(Loan).filter(Loan.user_id == userid, Loan.is_active == True).first()
+    
+    if loans_history:
+        raise UserLoanPending("Pending load detected!")
+    
+    # soft delete the user
+    user.is_active = False # db.delete(user)
+    
+    # revoking the refresh tokens 
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == user.id,
+        RefreshToken.is_revoked == False
+    ).update({"is_revoked": True})
+    
+    db.commit()
+    
+    return {"message": "User Deleted!"}
+

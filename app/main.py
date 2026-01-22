@@ -8,10 +8,12 @@ from app.core.rate_limiter import limiter
 from app.core.database import Base, engine
 from app.models import book,loan,role,user,refresh_token
 from app.api import books, auth, users, loans
+
 from app.exceptions.base import AppException
 from app.exceptions.auth import AuthenticationError, AuthorizationError
 from app.exceptions.book import BookNotFound,BookOutOfStock
 from app.exceptions.loan import AlreadyBorrowed,LoanNotFound,InvalidLoanOperation
+from app.exceptions.user import UserNotFound,UserLoanPending,UserEmailAlreadyExists
 
 app = FastAPI(title = "Library Management System")
 
@@ -111,6 +113,37 @@ async def authorization_exception_handler(
         status_code=400,
         content={"detail": exc.message}
     )
+
+@app.exception_handler(UserNotFound)
+async def authorization_exception_handler(
+    request: Request,
+    exc: UserNotFound
+):
+    return JSONResponse(
+        status_code=404,
+        content={"detail": exc.message}
+    )
+    
+@app.exception_handler(UserLoanPending)
+async def authorization_exception_handler(
+    request: Request,
+    exc: UserLoanPending
+):
+    return JSONResponse(
+        status_code=400,
+        content={"detail": exc.message}
+    )
+
+@app.exception_handler(UserEmailAlreadyExists)
+async def authorization_exception_handler(
+    request: Request,
+    exc: UserEmailAlreadyExists
+):
+    return JSONResponse(
+        status_code=400,
+        content={"detail": exc.message}
+    )
+
 
 @app.get("/")
 def home():
