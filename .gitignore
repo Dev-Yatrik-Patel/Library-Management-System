@@ -2,6 +2,13 @@ __pycache__
 *.pyc
 myvenv
 test.py
+<<<<<<< HEAD
 testcredentials.txt
 testcredentials
 .env
+=======
+.env
+__pycache__
+testcredentials
+testcredentials.txt
+>>>>>>> dev
