@@ -12,9 +12,9 @@ router = APIRouter(prefix="/books", tags=["Books"])
 
 @router.post("/", 
             response_model=BookResponse, 
-            status_code=status.HTTP_201_CREATED,
-            dependencies= [Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))])
-def create_book(book: BookCreate, db: Session = Depends(get_db)):
+            status_code=status.HTTP_201_CREATED
+            )
+def create_book(book: BookCreate, db: Session = Depends(get_db), user= Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))):
     db_book_obj = Book(
         name = book.name,
         isbn = book.isbn,
@@ -26,7 +26,8 @@ def create_book(book: BookCreate, db: Session = Depends(get_db)):
     
     return db_book_obj
 
-@router.get("/", response_model=list[BookResponse], status_code=status.HTTP_200_OK)
+@router.get("/", response_model=list[BookResponse], 
+            status_code=status.HTTP_200_OK)
 def get_books(
     search: str | None = Query(None, description = "Search a book with book name or ISBN")
     ,in_stock: bool | None = Query(None, description = "Filter books by stock > 0")
@@ -71,7 +72,8 @@ def get_books(
     
     return books
 
-@router.get("/{book_id}",response_model=BookResponse, status_code = status.HTTP_200_OK)
+@router.get("/{book_id}",response_model=BookResponse, 
+            status_code = status.HTTP_200_OK)
 def get_book_by_id(bookid : int, db: Session = Depends(get_db)):
     book = db.query(Book).filter(Book.id == bookid).first()
     if not book:
@@ -80,11 +82,11 @@ def get_book_by_id(bookid : int, db: Session = Depends(get_db)):
     return book
 
 @router.put("/{book_id}", 
-            response_model=BookUpdate,
-            dependencies= [Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))] )
+            response_model=BookUpdate )
 def update_book_by_id(bookid : int,
                       bookobj : BookUpdate,
-                      db: Session = Depends(get_db)):
+                      db: Session = Depends(get_db),
+                      user= Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))):
     book = db.query(Book).filter(Book.id==bookid).first()
     
     if not book:
@@ -101,10 +103,10 @@ def update_book_by_id(bookid : int,
     
     return book
 
-@router.delete("/{book_id}",
-               dependencies= [Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))])
+@router.delete("/{book_id}")
 def delete_book(bookid : int,
-                db: Session = Depends(get_db)):
+                db: Session = Depends(get_db),
+                user= Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))):
     
     book = db.query(Book).filter(Book.id==bookid).first()
     

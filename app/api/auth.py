@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.models.refresh_token import RefreshToken
 
-from app.utils.security import verify_password, create_access_token, create_refresh_token, refresh_token_expiry
+from app.utils.security import verify_password, create_access_token, create_refresh_token, refresh_token_expiry, decode_access_token
 from app.schemas.auth import RefreshTokenRequest, LogoutRequest
 
 import os
@@ -35,7 +35,7 @@ def get_current_user(
     )
     
     try: 
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = decode_access_token(token)
         user_id : str | None = payload.get("sub")
         if user_id is None:
             raise credentials_exception
