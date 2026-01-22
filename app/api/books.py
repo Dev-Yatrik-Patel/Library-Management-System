@@ -9,6 +9,8 @@ from app.schemas.book import BookCreate, BookUpdate, BookResponse
 from app.core.dependencies import require_roles
 from app.core.roles import Roles
 
+from app.exceptions.book import BookNotFound, BookOutOfStock
+
 router = APIRouter(prefix="/books", tags=["Books"])
 
 @router.post("/", 
@@ -81,8 +83,7 @@ def get_books(
 def get_book_by_id(request: Request, bookid : int, db: Session = Depends(get_db)):
     book = db.query(Book).filter(Book.id == bookid).first()
     if not book:
-        raise HTTPException(status_code= status.HTTP_404_NOT_FOUND,
-                            detail = "Book not Found!")
+        raise BookNotFound("Book not Found!")
     return book
 
 @router.put("/{book_id}", 
@@ -94,8 +95,7 @@ def update_book_by_id(bookid : int,
     book = db.query(Book).filter(Book.id==bookid).first()
     
     if not book:
-        raise HTTPException(status_code= status.HTTP_404_NOT_FOUND,
-                            detail = "Book not Found!")
+        raise BookNotFound("Book not Found!")
     
     updated_data = bookobj.model_dump(exclude_unset=True)
     
@@ -115,8 +115,7 @@ def delete_book(bookid : int,
     book = db.query(Book).filter(Book.id==bookid).first()
     
     if not book:
-        raise HTTPException(status_code= status.HTTP_404_NOT_FOUND,
-                            detail = "Book not Found!")
+        raise BookNotFound("Book not Found!")
     
     db.delete(book)
     db.commit()

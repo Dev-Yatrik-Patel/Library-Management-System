@@ -11,6 +11,8 @@ from app.models.refresh_token import RefreshToken
 from app.utils.security import verify_password, create_access_token, create_refresh_token, refresh_token_expiry, decode_access_token
 from app.schemas.auth import RefreshTokenRequest, LogoutRequest
 
+from app.exceptions.auth import AuthenticationError,AuthorizationError
+
 import os
 from dotenv import load_dotenv, find_dotenv
 from datetime import datetime
@@ -63,10 +65,7 @@ def login(
     # user.password_hash => $2b$12$kIVsVg78Su98CQn41An5KOdazXgL2JO283il7fXZOayX44VmH.PPO
     
     if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(
-            status_code = status.HTTP_401_UNAUTHORIZED,
-            detail = "Invalid email or password"
-        )
+        raise AuthenticationError("Invalid email or password")
     
     access_token = create_access_token(
         data = {"sub": str(user.id)}
@@ -114,10 +113,10 @@ def refresh_access_token(
     token_record = db.query(RefreshToken).filter(RefreshToken.token == data.refresh_token, RefreshToken.is_revoked == False).first()
     
     if not token_record:
-        raise HTTPException(status_code=401, detail="Invalid refresh token!")
+        raise AuthenticationError("Invalid refresh token!")
     
     if token_record.expires_at < datetime.now():
-        raise HTTPException(status_code=401, detail="Invalid refresh token!")
+        raise AuthenticationError("Invalid refresh token!")
     
     token_record.is_revoked = True
     new_refresh_token = create_refresh_token()
@@ -151,7 +150,7 @@ def logout(
     user_refresh_token = db.query(RefreshToken).filter(data.refresh_token == RefreshToken.token, RefreshToken.is_revoked == False).first()
     
     if not user_refresh_token:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
+        raise AuthenticationError("Invalid token")
     
     db.query(RefreshToken).filter(RefreshToken.is_revoked == False).update({"is_revoked": True})
     # user_refresh_token.is_revoked = True

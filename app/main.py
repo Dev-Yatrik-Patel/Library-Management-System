@@ -8,6 +8,10 @@ from app.core.rate_limiter import limiter
 from app.core.database import Base, engine
 from app.models import book,loan,role,user,refresh_token
 from app.api import books, auth, users, loans
+from app.exceptions.base import AppException
+from app.exceptions.auth import AuthenticationError, AuthorizationError
+from app.exceptions.book import BookNotFound,BookOutOfStock
+from app.exceptions.loan import AlreadyBorrowed,LoanNotFound,InvalidLoanOperation
 
 app = FastAPI(title = "Library Management System")
 
@@ -26,6 +30,86 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     return JSONResponse(
         status_code=429,
         content={"detail": "Too many requests. Please try again later."}
+    )
+
+@app.exception_handler(AppException)
+async def app_exception_handler(
+    request: Request,
+    exc: AppException
+):
+    return JSONResponse(
+        status_code=400,
+        content={"detail": exc.message}
+    )
+
+@app.exception_handler(AuthenticationError)
+async def auth_exception_handler(
+    request: Request,
+    exc: AuthenticationError
+):
+    return JSONResponse(
+        status_code=401,
+        content={"detail": exc.message}
+    )
+
+@app.exception_handler(AuthorizationError)
+async def authorization_exception_handler(
+    request: Request,
+    exc: AuthorizationError
+):
+    return JSONResponse(
+        status_code=403,
+        content={"detail": exc.message}
+    )
+
+@app.exception_handler(BookNotFound)
+async def authorization_exception_handler(
+    request: Request,
+    exc: BookNotFound
+):
+    return JSONResponse(
+        status_code=404,
+        content={"detail": exc.message}
+    )
+
+@app.exception_handler(BookOutOfStock)
+async def authorization_exception_handler(
+    request: Request,
+    exc: BookOutOfStock
+):
+    return JSONResponse(
+        status_code=400,
+        content={"detail": exc.message}
+    )
+
+@app.exception_handler(AlreadyBorrowed)
+async def authorization_exception_handler(
+    request: Request,
+    exc: AlreadyBorrowed
+):
+    return JSONResponse(
+        status_code=400,
+        content={"detail": exc.message}
+    )
+
+@app.exception_handler(LoanNotFound)
+async def authorization_exception_handler(
+    request: Request,
+    exc: LoanNotFound
+):
+    return JSONResponse(
+        status_code=400,
+        content={"detail": exc.message}
+    )
+
+@app.exception_handler(InvalidLoanOperation)
+async def authorization_exception_handler(
+    request: Request,
+    exc: InvalidLoanOperation
+):
+    return JSONResponse(
+        status_code=400,
+        content={"detail": exc.message}
     )
 
 @app.get("/")
