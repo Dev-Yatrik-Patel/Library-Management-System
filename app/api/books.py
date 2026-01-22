@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, asc, desc
 
 from app.core.database import get_db
+from app.core.rate_limiter import limiter
 from app.models.book import Book
 from app.schemas.book import BookCreate, BookUpdate, BookResponse
 from app.core.dependencies import require_roles
@@ -28,8 +29,10 @@ def create_book(book: BookCreate, db: Session = Depends(get_db), user= Depends(r
 
 @router.get("/", response_model=list[BookResponse], 
             status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
 def get_books(
-    search: str | None = Query(None, description = "Search a book with book name or ISBN")
+    request: Request
+    ,search: str | None = Query(None, description = "Search a book with book name or ISBN")
     ,in_stock: bool | None = Query(None, description = "Filter books by stock > 0")
     ,sort_by: str = Query("name", description="Sort by name or stock") 
     ,order: str = Query("asc", description="asc or desc")
@@ -74,7 +77,8 @@ def get_books(
 
 @router.get("/{book_id}",response_model=BookResponse, 
             status_code = status.HTTP_200_OK)
-def get_book_by_id(bookid : int, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def get_book_by_id(request: Request, bookid : int, db: Session = Depends(get_db)):
     book = db.query(Book).filter(Book.id == bookid).first()
     if not book:
         raise HTTPException(status_code= status.HTTP_404_NOT_FOUND,

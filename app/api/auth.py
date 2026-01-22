@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, status 
+from fastapi import APIRouter, HTTPException, Depends, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from jose import jwt, JWTError
 
 from app.core.database import get_db
+from app.core.rate_limiter import limiter
 from app.models.user import User
 from app.models.refresh_token import RefreshToken
 
@@ -50,7 +51,9 @@ def get_current_user(
     return user
     
 @router.post("/login")
+@limiter.limit("5/minute")
 def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -102,7 +105,9 @@ def read_me(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/refresh")
+@limiter.limit("10/minute")
 def refresh_access_token(
+    request: Request,
     data: RefreshTokenRequest,
     db: Session = Depends(get_db)
 ):
