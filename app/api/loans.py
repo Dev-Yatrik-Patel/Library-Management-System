@@ -5,12 +5,18 @@ from typing import List
 
 from app.schemas.loan import LoanCreate, LoanResponse
 from app.api.auth import get_current_user
+
 from app.core.database import get_db
 from app.core.dependencies import require_roles
 from app.core.roles import Roles 
+
 from app.models.loan import Loan
 from app.models.user import User
 from app.models.book import Book
+
+from app.exceptions.book import BookNotFound, BookOutOfStock
+from app.exceptions.auth import AuthenticationError, AuthorizationError
+from app.exceptions.loan import AlreadyBorrowed, InvalidLoanOperation, LoanNotFound
 
 router = APIRouter(prefix = '/loans', tags = ["Loans"])
 
@@ -24,10 +30,10 @@ def borrow_book(loan: LoanCreate,
     book = db.query(Book).filter(Book.id == loan.book_id).first()
     
     if not book:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found!")
-    
+        raise BookNotFound("Book not found!")
+        
     if book.stock <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Book out of Stock!")
+        raise BookOutOfStock("Book out of Stock!")
     
     existing_loan = db.query(Loan).filter(
         Loan.book_id == loan.book_id,
@@ -36,7 +42,7 @@ def borrow_book(loan: LoanCreate,
     ).first()
     
     if existing_loan:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You have already borrowed this book!")
+        raise AlreadyBorrowed("You have already borrowed this book!")
     
     new_loan = Loan(
         user_id = current_user.id,
@@ -60,10 +66,10 @@ def return_book(loan_id : int,
     loan = db.query(Loan).filter(Loan.id == loan_id, Loan.is_active == True).first()
     
     if not loan:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Loan not found!")
+        raise LoanNotFound("Loan not found!")
 
     if loan.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can not return this book!")
+        raise InvalidLoanOperation("You can not return this book!")
 
     book = db.query(Book).filter(loan.book_id == Book.id).first()
     
