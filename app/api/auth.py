@@ -114,12 +114,27 @@ def refresh_access_token(
     if token_record.expires_at < datetime.now():
         raise HTTPException(status_code=401, detail="Invalid refresh token!")
     
+    token_record.is_revoked = True
+    new_refresh_token = create_refresh_token()
+    
+    refresh_token_obj = RefreshToken(
+        user_id = token_record.user_id,
+        token = new_refresh_token,
+        expires_at = refresh_token_expiry()
+    )
+    
+    db.add(refresh_token_obj)
+    
+    
     access_token = create_access_token(
         {"sub": str(token_record.user_id)}
     )
+    
+    db.commit()
 
     return {
         "access_token": access_token,
+        "refresh_token": new_refresh_token,
         "token_type": "bearer"
     }
 
