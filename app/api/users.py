@@ -110,7 +110,8 @@ def delete_profile(
              status_code=status.HTTP_201_CREATED)
 def create_user(user: UserCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user),_= Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))):
     # Check if email already exists
-    existing_user = db.query(User).filter(User.email == user.email, User.is_active == True).first()
+    existing_user = db.query(User).filter(User.email == user.email.strip().lower(), User.is_active == True).first()
+    
     if existing_user:
         raise AuthenticationError("Email already registered")
 
@@ -122,7 +123,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db), current_user = 
     
     db_user = User(
         name=user.name,
-        email=user.email,
+        email=user.email.strip().lower(),
         password_hash=hash_password(user.password),
         role_id=user.role_id
     )
