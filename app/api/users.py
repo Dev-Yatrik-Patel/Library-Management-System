@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List
 
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
+from app.schemas.audit_logs import AuditAction
 from app.utils.security import hash_password
 from app.api.auth import get_current_user
 
@@ -11,19 +12,25 @@ from app.models.user import User
 from app.models.role import Role
 from app.models.loan import Loan
 from app.models.refresh_token import RefreshToken
+from app.models.audit_log import AuditLog
 
 from app.core.roles import Roles
 from app.core.dependencies import require_roles
 from app.core.database import get_db
+from app.core.audit import log_audit
 
-from app.exceptions.book import BookNotFound, BookOutOfStock
 from app.exceptions.auth import AuthenticationError, AuthorizationError
-from app.exceptions.loan import AlreadyBorrowed, InvalidLoanOperation, LoanNotFound
 from app.exceptions.user import UserNotFound,UserLoanPending,UserEmailAlreadyExists
 
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
+@router.get("/audit-logs")
+def get_audit_logs(
+    db: Session = Depends(get_db),
+    _ = Depends(require_roles(Roles.ADMIN))
+):
+    return db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(100).all()
 
 @router.get("/me",response_model=UserResponse) 
 def get_my_info(current_user: User = Depends(get_current_user)):
@@ -46,6 +53,16 @@ def update_my_profile(userupdateobj: UserUpdate, db: Session = Depends(get_db), 
         setattr(current_user,k,v)
     
     current_user.updated_at = datetime.now()
+    
+    # Audit user updation 
+    log_audit(
+        db,
+        action=AuditAction.USER_UPDATED,
+        entity="User",
+        entity_id=current_user.id,
+        performed_by=current_user.id,
+        message=f"User {current_user.email} updated by himself/herself."
+    )
     
     db.commit()
     db.refresh(current_user)
@@ -74,13 +91,24 @@ def delete_profile(
         RefreshToken.is_revoked == False
     ).update({"is_revoked": True},synchronize_session=False)
     
+    # Audit user deletion
+    log_audit(
+        db,
+        action=AuditAction.USER_SELF_DELETED,
+        entity="User",
+        entity_id=current_user.id,
+        performed_by=current_user.id,
+        message=f"User {current_user.email} deleted by himself/herself."
+    )
+    
     db.commit()
+    
     return {"message": "Account deleted"}
 
 @router.post("/", 
              response_model=UserResponse, 
              status_code=status.HTTP_201_CREATED)
-def create_user(user: UserCreate, db: Session = Depends(get_db), _= Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))):
+def create_user(user: UserCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user),_= Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))):
     # Check if email already exists
     existing_user = db.query(User).filter(User.email == user.email, User.is_active == True).first()
     if existing_user:
@@ -100,9 +128,21 @@ def create_user(user: UserCreate, db: Session = Depends(get_db), _= Depends(requ
     )
 
     db.add(db_user)
+    db.flush()
+    
+    # Audit user creation
+    log_audit(
+        db,
+        action=AuditAction.USER_CREATED,
+        entity="User",
+        entity_id=db_user.id,
+        performed_by=current_user.id,
+        message=f"User {user.email} created by admin"
+    )
+    
     db.commit()
     db.refresh(db_user)
-
+    
     return db_user
 
 @router.get("/", 
@@ -124,7 +164,11 @@ def get_user_by_id(userid: int, db:Session = Depends(get_db),_= Depends(require_
     return user
 
 @router.put("/{userid}", response_model=UserResponse)
-def update_user_by_id(userid: int, updateuserobj: UserUpdate, db: Session = Depends(get_db), _=Depends(require_roles(Roles.ADMIN))):
+def update_user_by_id(userid: int, 
+                      updateuserobj: UserUpdate, 
+                      db: Session = Depends(get_db), 
+                      current_user: User = Depends(get_current_user),
+                      _=Depends(require_roles(Roles.ADMIN))):
     
     user = db.query(User).filter(User.id == userid,User.is_active==True).first()
     
@@ -144,6 +188,17 @@ def update_user_by_id(userid: int, updateuserobj: UserUpdate, db: Session = Depe
         setattr(user,k,v)
     
     user.updated_at = datetime.now()
+    
+    # Audit user updation
+    log_audit(
+        db,
+        action=AuditAction.USER_UPDATED,
+        entity="User",
+        entity_id=user.id,
+        performed_by=current_user.id,
+        message=f"User {user.email} updated by admin"
+    )
+    
     db.commit()
     db.refresh(user)
     
@@ -173,6 +228,16 @@ def delete_user(userid: int, db:Session = Depends(get_db), current_user: User = 
         RefreshToken.user_id == user.id,
         RefreshToken.is_revoked == False
     ).update({"is_revoked": True})
+    
+    # Audit user deletion 
+    log_audit(
+        db,
+        action=AuditAction.USER_DELETED,
+        entity="User",
+        entity_id=user.id,
+        performed_by=current_user.id,
+        message=f"User {user.email} deleted by admin"
+    )
     
     db.commit()
     

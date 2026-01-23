@@ -5,11 +5,14 @@ from jose import jwt, JWTError
 
 from app.core.database import get_db
 from app.core.rate_limiter import limiter
+from app.core.audit import log_audit
 from app.models.user import User
 from app.models.refresh_token import RefreshToken
+from app.models.audit_log import AuditLog
 
 from app.utils.security import verify_password, create_access_token, create_refresh_token, refresh_token_expiry, decode_access_token
 from app.schemas.auth import RefreshTokenRequest, LogoutRequest
+from app.schemas.audit_logs import AuditAction
 
 from app.exceptions.auth import AuthenticationError,AuthorizationError
 
@@ -44,10 +47,8 @@ def get_current_user(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    tid = int(user_id)
-    print(tid, type(tid))
 
-    user = db.query(User).filter(User.id == tid,User.is_active == True).first()
+    user = db.query(User).filter(User.id == int(user_id),User.is_active == True).first()
     
     if user is None: 
         raise credentials_exception
@@ -88,7 +89,7 @@ def login(
     db.add(refresh_token)
 
     db.commit()
-    
+        
     return{
         "access_token" : access_token,
         "refresh_token" : refresh_token_value,
@@ -103,7 +104,6 @@ def read_me(current_user: User = Depends(get_current_user)):
         "email" : current_user.email,
         "role_id" : current_user.role_id
     }
-
 
 @router.post("/refresh")
 @limiter.limit("10/minute")
@@ -147,7 +147,8 @@ def refresh_access_token(
 @router.post("/logout")
 def logout(
     data: LogoutRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     user_refresh_token = db.query(RefreshToken).filter(data.refresh_token == RefreshToken.token, RefreshToken.is_revoked == False).first()
     
@@ -156,8 +157,17 @@ def logout(
     
     db.query(RefreshToken).filter(RefreshToken.is_revoked == False).update({"is_revoked": True})
     # user_refresh_token.is_revoked = True
+    
+    # Token revoked audit
+    log_audit(
+        db,
+        action=AuditAction.TOKEN_REVOKED,
+        entity="RefreshTokens",
+        entity_id= user_refresh_token.id,
+        performed_by= current_user.id,
+        message=f"User {current_user.email} revoked token by himself/herself."
+    )
+    
     db.commit()
     
     return{"message": "Logout Successfully"}
-
-    

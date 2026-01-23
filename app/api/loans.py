@@ -4,15 +4,18 @@ from datetime import date
 from typing import List
 
 from app.schemas.loan import LoanCreate, LoanResponse
+from app.schemas.audit_logs import AuditAction
 from app.api.auth import get_current_user
 
 from app.core.database import get_db
 from app.core.dependencies import require_roles
 from app.core.roles import Roles 
+from app.core.audit import log_audit
 
 from app.models.loan import Loan
 from app.models.user import User
 from app.models.book import Book
+from app.models.audit_log import AuditLog
 
 from app.exceptions.book import BookNotFound, BookOutOfStock
 from app.exceptions.auth import AuthenticationError, AuthorizationError
@@ -54,6 +57,18 @@ def borrow_book(loan: LoanCreate,
     book.stock -= 1
     
     db.add(new_loan)
+    db.flush()
+    
+    # Audit loan creation
+    log_audit(
+        db,
+        action=AuditAction.LOAN_CREATED,
+        entity="Loan",
+        entity_id=new_loan.id,
+        performed_by=current_user.id,
+        message=f"User {current_user.email} took book by himself/herself."
+    )
+    
     db.commit()
     db.refresh(new_loan)
     
@@ -76,6 +91,16 @@ def return_book(loan_id : int,
     loan.is_active = False
     loan.returned_at = date.today()
     book.stock += 1
+    
+    # Audit loan creation
+    log_audit(
+        db,
+        action=AuditAction.LOAN_RETURNED,
+        entity="Loan",
+        entity_id=loan.id,
+        performed_by=current_user.id,
+        message=f"User {current_user.email} returned book by himself/herself."
+    )
     
     db.commit()
     

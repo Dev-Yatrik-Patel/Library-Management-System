@@ -6,7 +6,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.core.rate_limiter import limiter
 
 from app.core.database import Base, engine
-from app.models import book,loan,role,user,refresh_token
+from app.models import book,loan,role,user,refresh_token,audit_log
 from app.api import books, auth, users, loans
 
 from app.exceptions.base import AppException
