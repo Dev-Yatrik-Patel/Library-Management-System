@@ -14,7 +14,8 @@ class User(Base):
     created_at = Column(TIMESTAMP, server_default= func.now() )
     is_active = Column(Boolean, default=True)
     updated_at = Column(TIMESTAMP, nullable = True)
-    
+    deleted_at = Column(TIMESTAMP, nullable = True)
+    deleted_by = Column(Integer, nullable = True)
     
     role = relationship("Role")
     

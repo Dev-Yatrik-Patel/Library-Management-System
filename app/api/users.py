@@ -47,10 +47,6 @@ def update_my_profile(userupdateobj: UserUpdate, db: Session = Depends(get_db), 
     
     current_user.updated_at = datetime.now()
     
-    print('*'*30)
-    print(datetime.now())
-    print('*'*30)
-    
     db.commit()
     db.refresh(current_user)
     
@@ -69,6 +65,8 @@ def delete_profile(
     
     # soft delete the user
     current_user.is_active = False # db.delete(user)
+    current_user.deleted_at = datetime.now()
+    current_user.deleted_by = current_user.id
     
     # revoking the refresh tokens 
     db.query(RefreshToken).filter(
@@ -152,7 +150,7 @@ def update_user_by_id(userid: int, updateuserobj: UserUpdate, db: Session = Depe
     return user
 
 @router.delete("/{userid}")
-def delete_user(userid: int, db:Session = Depends(get_db), _=Depends(require_roles(Roles.ADMIN))):
+def delete_user(userid: int, db:Session = Depends(get_db), current_user: User = Depends(get_current_user),_=Depends(require_roles(Roles.ADMIN))):
     
     user = db.query(User).filter(User.id == userid,User.is_active==True).first()
     
@@ -167,6 +165,8 @@ def delete_user(userid: int, db:Session = Depends(get_db), _=Depends(require_rol
     
     # soft delete the user
     user.is_active = False # db.delete(user)
+    user.deleted_at = datetime.now()
+    user.deleted_by = current_user.id
     
     # revoking the refresh tokens 
     db.query(RefreshToken).filter(
