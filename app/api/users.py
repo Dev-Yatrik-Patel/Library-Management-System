@@ -47,6 +47,10 @@ def update_my_profile(userupdateobj: UserUpdate, db: Session = Depends(get_db), 
     
     current_user.updated_at = datetime.now()
     
+    print('*'*30)
+    print(datetime.now())
+    print('*'*30)
+    
     db.commit()
     db.refresh(current_user)
     
@@ -80,7 +84,7 @@ def delete_profile(
              status_code=status.HTTP_201_CREATED)
 def create_user(user: UserCreate, db: Session = Depends(get_db), _= Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))):
     # Check if email already exists
-    existing_user = db.query(User).filter(User.email == user.email).first()
+    existing_user = db.query(User).filter(User.email == user.email, User.is_active == True).first()
     if existing_user:
         raise AuthenticationError("Email already registered")
 
@@ -142,7 +146,6 @@ def update_user_by_id(userid: int, updateuserobj: UserUpdate, db: Session = Depe
         setattr(user,k,v)
     
     user.updated_at = datetime.now()
-    
     db.commit()
     db.refresh(user)
     
