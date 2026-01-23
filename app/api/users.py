@@ -47,7 +47,7 @@ def update_my_profile(userupdateobj: UserUpdate, db: Session = Depends(get_db), 
             User.id != current_user.id
         ).first()
         if exists:
-            raise UserEmailAlreadyExists("Email already in use")
+            raise UserEmailAlreadyExists()
     
     for k,v in updated_data.items():
         setattr(current_user,k,v)
@@ -78,7 +78,7 @@ def delete_profile(
     loans_history = db.query(Loan).filter(Loan.user_id == current_user.id, Loan.is_active == True).first()
     
     if loans_history:
-        raise UserLoanPending("Pending load detected! Action can't be perfomed.")
+        raise UserLoanPending()
     
     # soft delete the user
     current_user.is_active = False # db.delete(user)
@@ -113,12 +113,12 @@ def create_user(user: UserCreate, db: Session = Depends(get_db), current_user = 
     existing_user = db.query(User).filter(User.email == user.email.strip().lower(), User.is_active == True).first()
     
     if existing_user:
-        raise AuthenticationError("Email already registered")
+        raise AuthenticationError(message = "Email already registered")
 
     # Validate role
     role = db.query(Role).filter(Role.id == user.role_id).first()
     if not role:
-        raise AuthenticationError("Invalid role_id")
+        raise AuthenticationError(message = "Invalid role_id")
         
     
     db_user = User(
@@ -160,7 +160,7 @@ def get_user_by_id(userid: int, db:Session = Depends(get_db),_= Depends(require_
     user= db.query(User).filter(User.id == userid,User.is_active==True).first()
     
     if not user:
-        raise UserNotFound("User not Found!")        
+        raise UserNotFound()        
     
     return user
 
@@ -174,7 +174,7 @@ def update_user_by_id(userid: int,
     user = db.query(User).filter(User.id == userid,User.is_active==True).first()
     
     if not user:
-        raise UserNotFound("User not Found!")        
+        raise UserNotFound()        
     
     updated_data = updateuserobj.model_dump(exclude_unset=True)
     if "email" in updated_data:
@@ -183,7 +183,7 @@ def update_user_by_id(userid: int,
             User.id != user.id
         ).first()
         if exists:
-            raise UserEmailAlreadyExists("Email already in use")
+            raise UserEmailAlreadyExists()
     
     for k,v in updated_data.items():
         setattr(user,k,v)
@@ -211,13 +211,13 @@ def delete_user(userid: int, db:Session = Depends(get_db), current_user: User = 
     user = db.query(User).filter(User.id == userid,User.is_active==True).first()
     
     if not user:
-        raise UserNotFound("User not Found!")
+        raise UserNotFound()
     
     # checkin the loan history of the user before removing
     loans_history = db.query(Loan).filter(Loan.user_id == userid, Loan.is_active == True).first()
     
     if loans_history:
-        raise UserLoanPending("Pending load detected!")
+        raise UserLoanPending()
     
     # soft delete the user
     user.is_active = False # db.delete(user)

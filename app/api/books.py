@@ -4,6 +4,7 @@ from sqlalchemy import or_, asc, desc
 
 from app.core.database import get_db
 from app.core.rate_limiter import limiter
+from app.core.response import success_response
 from app.models.book import Book
 from app.schemas.book import BookCreate, BookUpdate, BookResponse
 from app.core.dependencies import require_roles
@@ -27,7 +28,10 @@ def create_book(book: BookCreate, db: Session = Depends(get_db), user= Depends(r
     db.commit()
     db.refresh(db_book_obj)
     
-    return db_book_obj
+    return success_response(
+        data = db_book_obj
+    )
+
 
 @router.get("/", response_model=list[BookResponse], 
             status_code=status.HTTP_200_OK)
@@ -75,7 +79,9 @@ def get_books(
     # final filtering
     books = query.offset(offset).limit(limit).all()
     
-    return books
+    return success_response(
+        data = BookResponse(books).model_dump()
+    )
 
 @router.get("/{book_id}",response_model=BookResponse, 
             status_code = status.HTTP_200_OK)
@@ -83,7 +89,7 @@ def get_books(
 def get_book_by_id(request: Request, bookid : int, db: Session = Depends(get_db)):
     book = db.query(Book).filter(Book.id == bookid).first()
     if not book:
-        raise BookNotFound("Book not Found!")
+        raise BookNotFound()
     return book
 
 @router.put("/{book_id}", 
@@ -95,7 +101,7 @@ def update_book_by_id(bookid : int,
     book = db.query(Book).filter(Book.id==bookid).first()
     
     if not book:
-        raise BookNotFound("Book not Found!")
+        raise BookNotFound()
     
     updated_data = bookobj.model_dump(exclude_unset=True)
     
@@ -115,7 +121,7 @@ def delete_book(bookid : int,
     book = db.query(Book).filter(Book.id==bookid).first()
     
     if not book:
-        raise BookNotFound("Book not Found!")
+        raise BookNotFound()
     
     db.delete(book)
     db.commit()

@@ -33,10 +33,10 @@ def borrow_book(loan: LoanCreate,
     book = db.query(Book).filter(Book.id == loan.book_id).first()
     
     if not book:
-        raise BookNotFound("Book not found!")
+        raise BookNotFound()
         
     if book.stock <= 0:
-        raise BookOutOfStock("Book out of Stock!")
+        raise BookOutOfStock()
     
     existing_loan = db.query(Loan).filter(
         Loan.book_id == loan.book_id,
@@ -45,7 +45,7 @@ def borrow_book(loan: LoanCreate,
     ).first()
     
     if existing_loan:
-        raise AlreadyBorrowed("You have already borrowed this book!")
+        raise AlreadyBorrowed(message = "You have already borrowed this book!")
     
     new_loan = Loan(
         user_id = current_user.id,
@@ -81,10 +81,10 @@ def return_book(loan_id : int,
     loan = db.query(Loan).filter(Loan.id == loan_id, Loan.is_active == True).first()
     
     if not loan:
-        raise LoanNotFound("Loan not found!")
+        raise LoanNotFound()
 
     if loan.user_id != current_user.id:
-        raise InvalidLoanOperation("You can not return this book!")
+        raise InvalidLoanOperation(message = "You can not return this book!")
 
     book = db.query(Book).filter(loan.book_id == Book.id).first()
     

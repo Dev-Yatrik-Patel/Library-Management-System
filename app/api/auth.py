@@ -6,6 +6,8 @@ from jose import jwt, JWTError
 from app.core.database import get_db
 from app.core.rate_limiter import limiter
 from app.core.audit import log_audit
+from app.core.response import success_response
+
 from app.models.user import User
 from app.models.refresh_token import RefreshToken
 from app.models.audit_log import AuditLog
@@ -13,8 +15,10 @@ from app.models.audit_log import AuditLog
 from app.utils.security import verify_password, create_access_token, create_refresh_token, refresh_token_expiry, decode_access_token
 from app.schemas.auth import RefreshTokenRequest, LogoutRequest
 from app.schemas.audit_logs import AuditAction
+from app.schemas.user import UserResponse
 
 from app.exceptions.auth import AuthenticationError,AuthorizationError
+
 
 import os
 from dotenv import load_dotenv, find_dotenv
@@ -47,14 +51,15 @@ def get_current_user(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-
-    user = db.query(User).filter(User.id == int(user_id),User.is_active == True).first()
+    
+    user = db.query(User).filter(User.id == int(user_id)).first()
     
     if user is None: 
         raise credentials_exception
     
     return user
     
+
 @router.post("/login")
 @limiter.limit("5/minute")
 def login(
@@ -68,7 +73,7 @@ def login(
     # user.password_hash => $2b$12$kIVsVg78Su98CQn41An5KOdazXgL2JO283il7fXZOayX44VmH.PPO
     
     if not user or not verify_password(form_data.password, user.password_hash):
-        raise AuthenticationError("Invalid email or password")
+        raise AuthenticationError(message = "Invalid email or password")
     
     access_token = create_access_token(
         data = {"sub": str(user.id)}
@@ -90,20 +95,25 @@ def login(
 
     db.commit()
         
-    return{
-        "access_token" : access_token,
-        "refresh_token" : refresh_token_value,
-        "token_type": "bearer"
-    }
+    return success_response(
+        data = {
+            "access_token" : access_token,
+            "refresh_token" : refresh_token_value,
+            "token_type": "bearer"
+        }
+    )
+
 
 @router.get("/me")
 def read_me(current_user: User = Depends(get_current_user)):
-    return {
-        "id" : current_user.id,
-        "name" : current_user.name,
-        "email" : current_user.email,
-        "role_id" : current_user.role_id
-    }
+    return success_response(
+        data = {
+            "id" : current_user.id,
+            "name" : current_user.name,
+            "email" : current_user.email,
+            "role_id" : current_user.role_id
+        }
+    )
 
 @router.post("/refresh")
 @limiter.limit("10/minute")
@@ -115,10 +125,10 @@ def refresh_access_token(
     token_record = db.query(RefreshToken).filter(RefreshToken.token == data.refresh_token, RefreshToken.is_revoked == False).first()
     
     if not token_record:
-        raise AuthenticationError("Invalid refresh token!")
+        raise AuthenticationError(message = "Invalid refresh token!")
     
     if token_record.expires_at < datetime.now():
-        raise AuthenticationError("Invalid refresh token!")
+        raise AuthenticationError(message = "Invalid refresh token!")
     
     token_record.is_revoked = True
     new_refresh_token = create_refresh_token()
@@ -138,11 +148,14 @@ def refresh_access_token(
     
     db.commit()
 
-    return {
-        "access_token": access_token,
-        "refresh_token": new_refresh_token,
-        "token_type": "bearer"
-    }
+    return success_response(
+        data = {
+            "access_token": access_token,
+            "refresh_token": new_refresh_token,
+            "token_type": "bearer"
+        }
+    )
+
 
 @router.post("/logout")
 def logout(
@@ -153,7 +166,7 @@ def logout(
     user_refresh_token = db.query(RefreshToken).filter(data.refresh_token == RefreshToken.token, RefreshToken.is_revoked == False).first()
     
     if not user_refresh_token:
-        raise AuthenticationError("Invalid token")
+        raise AuthenticationError(message = "Invalid token")
     
     db.query(RefreshToken).filter(RefreshToken.is_revoked == False).update({"is_revoked": True})
     # user_refresh_token.is_revoked = True
@@ -170,4 +183,7 @@ def logout(
     
     db.commit()
     
-    return{"message": "Logout Successfully"}
+    return success_response(
+     message="Logout Successfully"   
+    )
+
