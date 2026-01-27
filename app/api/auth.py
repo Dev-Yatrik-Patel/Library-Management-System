@@ -19,46 +19,18 @@ from app.schemas.user import UserResponse
 
 from app.exceptions.auth import AuthenticationError,AuthorizationError
 
-
 import os
 from dotenv import load_dotenv, find_dotenv
 from datetime import datetime
 
-load_dotenv(find_dotenv())
-SECRET_KEY = os.getenv("SECRET_KEY","secret")
-
+from app.controllers.auth_controller import (
+    login_user,
+    get_current_user,
+    refresh_access_token_user,
+    logout_user
+)
 
 router = APIRouter(prefix='/auth', tags=["Auth"])
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-ALGORITHM = "HS256"
-
-
-# Helper Function
-def get_current_user(
-    token : str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-):
-    credentials_exception = HTTPException(
-        status_code = status.HTTP_401_UNAUTHORIZED,
-        detail = "Cound not validate Credentials",
-        headers = {"WWW-Authenticated" : "Bearer"}
-    )
-    
-    try: 
-        payload = decode_access_token(token)
-        user_id : str | None = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    
-    if user is None: 
-        raise credentials_exception
-    
-    return user
-    
 
 @router.post("/login")
 @limiter.limit("5/minute")
@@ -67,40 +39,8 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.email == form_data.username,User.is_active == True).first()
-    
-    # form_data.password => test1234
-    # user.password_hash => $2b$12$kIVsVg78Su98CQn41An5KOdazXgL2JO283il7fXZOayX44VmH.PPO
-    
-    if not user or not verify_password(form_data.password, user.password_hash):
-        raise AuthenticationError(message = "Invalid email or password")
-    
-    access_token = create_access_token(
-        data = {"sub": str(user.id)}
-    )
-    
-    refresh_token_value = create_refresh_token()
-    refresh_token = RefreshToken(
-        user_id = user.id,
-        token = refresh_token_value,
-        expires_at = refresh_token_expiry()
-    )
-    
-    db.query(RefreshToken).filter(
-        RefreshToken.user_id == user.id,
-        RefreshToken.is_revoked == False
-    ).update({"is_revoked": True})
-    
-    db.add(refresh_token)
-
-    db.commit()
-        
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token_value,
-        "token_type": "bearer"
-    }
-
+    tokenPayLoad = login_user(form_data = form_data, db = db)
+    return tokenPayLoad
 
 @router.get("/me")
 def read_me(current_user: User = Depends(get_current_user)):
@@ -120,40 +60,10 @@ def refresh_access_token(
     data: RefreshTokenRequest,
     db: Session = Depends(get_db)
 ):
-    token_record = db.query(RefreshToken).filter(RefreshToken.token == data.refresh_token, RefreshToken.is_revoked == False).first()
-    
-    if not token_record:
-        raise AuthenticationError(message = "Invalid refresh token!")
-    
-    if token_record.expires_at < datetime.now():
-        raise AuthenticationError(message = "Invalid refresh token!")
-    
-    token_record.is_revoked = True
-    new_refresh_token = create_refresh_token()
-    
-    refresh_token_obj = RefreshToken(
-        user_id = token_record.user_id,
-        token = new_refresh_token,
-        expires_at = refresh_token_expiry()
-    )
-    
-    db.add(refresh_token_obj)
-    
-    
-    access_token = create_access_token(
-        {"sub": str(token_record.user_id)}
-    )
-    
-    db.commit()
-
+    tokenRefreshPayLoad = refresh_access_token_user(data = data, db = db)
     return success_response(
-        data = {
-            "access_token": access_token,
-            "refresh_token": new_refresh_token,
-            "token_type": "bearer"
-        }
+        data = tokenRefreshPayLoad
     )
-
 
 @router.post("/logout")
 def logout(
@@ -161,26 +71,7 @@ def logout(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    user_refresh_token = db.query(RefreshToken).filter(data.refresh_token == RefreshToken.token, RefreshToken.is_revoked == False).first()
-    
-    if not user_refresh_token:
-        raise AuthenticationError(message = "Invalid token")
-    
-    db.query(RefreshToken).filter(RefreshToken.is_revoked == False).update({"is_revoked": True})
-    # user_refresh_token.is_revoked = True
-    
-    # Token revoked audit
-    log_audit(
-        db,
-        action=AuditAction.TOKEN_REVOKED,
-        entity="RefreshTokens",
-        entity_id= user_refresh_token.id,
-        performed_by= current_user.id,
-        message=f"User {current_user.email} revoked token by himself/herself."
-    )
-    
-    db.commit()
-    
+    logout_user(data = data, db = db, current_user = current_user)
     return success_response(
      message="Logout Successfully"   
     )

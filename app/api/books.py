@@ -1,16 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, Depends, status, Query, Request
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, asc, desc
+
+from app.schemas.book import BookCreate, BookUpdate, BookResponse
 
 from app.core.database import get_db
 from app.core.rate_limiter import limiter
 from app.core.response import success_response
-from app.models.book import Book
-from app.schemas.book import BookCreate, BookUpdate, BookResponse
 from app.core.dependencies import require_roles
 from app.core.roles import Roles
 
-from app.exceptions.book import BookNotFound, BookOutOfStock
+from app.controllers.book_controller import(
+    create_book_admin,
+    search_books,
+    get_specific_book,
+    update_book_by_id_admin,
+    delete_book_admin
+)
 
 router = APIRouter(prefix="/books", tags=["Books"])
 
@@ -19,17 +24,9 @@ router = APIRouter(prefix="/books", tags=["Books"])
             status_code=status.HTTP_201_CREATED
             )
 def create_book(book: BookCreate, db: Session = Depends(get_db), user= Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))):
-    db_book_obj = Book(
-        name = book.name,
-        isbn = book.isbn,
-        stock = book.stock
-    )
-    db.add(db_book_obj)
-    db.commit()
-    db.refresh(db_book_obj)
-    
+    new_book = create_book_admin(book = book, db = db)
     return success_response(
-        data = BookResponse.model_validate(db_book_obj).model_dump(mode="json")
+        data = BookResponse.model_validate(new_book).model_dump(mode="json")
     )
 
 
@@ -45,40 +42,8 @@ def get_books(
     ,page: int = Query(1, ge=1)
     ,limit: int = Query(10, ge=1, le=100)
     ,db: Session = Depends(get_db)
-    ):
-    
-    query = db.query(Book)
-    
-    # searching 
-    if search:
-        query = query.filter( or_ 
-                             (
-                                 Book.name.ilike(f"%{search}%"),
-                                 Book.isbn.ilike(f"%{search}%")
-                             )
-                            )
-    # in stock filter
-    if in_stock is True:
-        query = query.filter(Book.stock > 0) 
-    
-    # sorting column
-    if sort_by == "stock":
-        sort_column = Book.stock
-    else:
-        sort_column = Book.name
-        
-    # sorting order 
-    if order == "desc":
-        query = query.order_by(desc(sort_column))
-    else:
-        query = query.order_by(asc(sort_column))
-    
-    # pagination 
-    offset = (page - 1) * limit
-    
-    # final filtering
-    books = query.offset(offset).limit(limit).all()
-    
+    ):    
+    books = search_books(db = db, search = search, in_stock = in_stock, sort_by = sort_by, order = order, page = page, limit = limit)
     return success_response(
         data = 
         [ BookResponse.model_validate(i).model_dump(mode="json") for i in books ]
@@ -88,9 +53,7 @@ def get_books(
             status_code = status.HTTP_200_OK)
 @limiter.limit("5/minute")
 def get_book_by_id(request: Request, bookid : int, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.id == bookid).first()
-    if not book:
-        raise BookNotFound()
+    book = get_specific_book(bookid = bookid, db = db)
     return success_response(
             data = BookResponse.model_validate(book).model_dump(mode="json")
         )
@@ -101,18 +64,7 @@ def update_book_by_id(bookid : int,
                       bookobj : BookUpdate,
                       db: Session = Depends(get_db),
                       user= Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))):
-    book = db.query(Book).filter(Book.id==bookid).first()
-    
-    if not book:
-        raise BookNotFound()
-    
-    updated_data = bookobj.model_dump(exclude_unset=True)
-    
-    for k,v in updated_data.items():
-        setattr(book,k,v)
-
-    db.commit()
-    db.refresh(book)
+    book = update_book_by_id_admin(bookid = bookid, bookobj = bookobj, db = db)
     
     return success_response(
             data = BookResponse.model_validate(book).model_dump(mode="json")
@@ -122,13 +74,5 @@ def update_book_by_id(bookid : int,
 def delete_book(bookid : int,
                 db: Session = Depends(get_db),
                 user= Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))):
-    
-    book = db.query(Book).filter(Book.id==bookid).first()
-    
-    if not book:
-        raise BookNotFound()
-    
-    db.delete(book)
-    db.commit()
-    
+    delete_book_admin(bookid = bookid, db = db)
     return success_response(message="Book Deleted!")

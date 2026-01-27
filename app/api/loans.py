@@ -1,26 +1,24 @@
-from fastapi import APIRouter,HTTPException, Depends, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
-from datetime import date
 from typing import List
 
 from app.schemas.loan import LoanCreate, LoanResponse
-from app.schemas.audit_logs import AuditAction
-from app.api.auth import get_current_user
+
+from app.controllers.auth_controller import get_current_user
 
 from app.core.database import get_db
 from app.core.dependencies import require_roles
 from app.core.roles import Roles 
-from app.core.audit import log_audit
 from app.core.response import success_response
 
-from app.models.loan import Loan
 from app.models.user import User
-from app.models.book import Book
-from app.models.audit_log import AuditLog
 
-from app.exceptions.book import BookNotFound, BookOutOfStock
-from app.exceptions.auth import AuthenticationError, AuthorizationError
-from app.exceptions.loan import AlreadyBorrowed, InvalidLoanOperation, LoanNotFound
+from app.controllers.loan_controller import (
+    borrow_book_user,
+    return_book_user,
+    active_loans_users,
+    my_loan_history_user,
+    user_loan_history_admin)
 
 router = APIRouter(prefix = '/loans', tags = ["Loans"])
 
@@ -30,49 +28,7 @@ router = APIRouter(prefix = '/loans', tags = ["Loans"])
 def borrow_book(loan: LoanCreate,
                 current_user: User = Depends(get_current_user),
                 db: Session = Depends(get_db)):
-    
-    book = db.query(Book).filter(Book.id == loan.book_id).first()
-    
-    if not book:
-        raise BookNotFound()
-        
-    if book.stock <= 0:
-        raise BookOutOfStock()
-    
-    existing_loan = db.query(Loan).filter(
-        Loan.book_id == loan.book_id,
-        Loan.user_id == current_user.id,
-        Loan.is_active == True
-    ).first()
-    
-    if existing_loan:
-        raise AlreadyBorrowed(message = "You have already borrowed this book!")
-    
-    new_loan = Loan(
-        user_id = current_user.id,
-        book_id = loan.book_id,
-        borrow_issue_date = date.today(),
-        due_date = loan.due_date
-    )
-    
-    book.stock -= 1
-    
-    db.add(new_loan)
-    db.flush()
-    
-    # Audit loan creation
-    log_audit(
-        db,
-        action=AuditAction.LOAN_CREATED,
-        entity="Loan",
-        entity_id=new_loan.id,
-        performed_by=current_user.id,
-        message=f"User {current_user.email} took book by himself/herself."
-    )
-    
-    db.commit()
-    db.refresh(new_loan)
-    
+    new_loan = borrow_book_user(loan = loan, current_user = current_user, db = db )
     return success_response(
         data = LoanResponse.model_validate(new_loan).model_dump(mode="json")
     )
@@ -81,38 +37,13 @@ def borrow_book(loan: LoanCreate,
 def return_book(loan_id : int,
                 db: Session = Depends(get_db),
                 current_user: User = Depends(get_current_user)):
-    loan = db.query(Loan).filter(Loan.id == loan_id, Loan.is_active == True).first()
-    
-    if not loan:
-        raise LoanNotFound()
-
-    if loan.user_id != current_user.id:
-        raise InvalidLoanOperation(message = "You can not return this book!")
-
-    book = db.query(Book).filter(loan.book_id == Book.id).first()
-    
-    loan.is_active = False
-    loan.returned_at = date.today()
-    book.stock += 1
-    
-    # Audit loan creation
-    log_audit(
-        db,
-        action=AuditAction.LOAN_RETURNED,
-        entity="Loan",
-        entity_id=loan.id,
-        performed_by=current_user.id,
-        message=f"User {current_user.email} returned book by himself/herself."
-    )
-    
-    db.commit()
-    
+    return_book_user(loan_id= loan_id, db = db, current_user = current_user)
     return success_response(message="Book return successfully!")
 
 @router.get("/me", response_model=List[LoanResponse])
 def my_active_loans(db: Session = Depends(get_db),
              current_user: User = Depends(get_current_user)):
-    activeLoanRecords = db.query(Loan).filter(current_user.id == Loan.user_id, Loan.is_active == True).all()
+    activeLoanRecords = active_loans_users(db = db, current_user = current_user )
     return success_response(
         data = [ LoanResponse.model_validate(i).model_dump(mode="json") for i in activeLoanRecords]
     )
@@ -120,7 +51,7 @@ def my_active_loans(db: Session = Depends(get_db),
 @router.get("/history", response_model=List[LoanResponse])
 def my_loan_history(db: Session = Depends(get_db),
              current_user: User = Depends(get_current_user)):
-    historyLoanRecords = db.query(Loan).filter(current_user.id == Loan.user_id).all()
+    historyLoanRecords = my_loan_history_user(db = db, current_user = current_user)
     return success_response(
         data = [ LoanResponse.model_validate(i).model_dump(mode="json") for i in historyLoanRecords]
     )
@@ -129,7 +60,7 @@ def my_loan_history(db: Session = Depends(get_db),
             response_model=List[LoanResponse],
             dependencies=[Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))])
 def user_loan_history(user_id: int, db: Session = Depends(get_db) ):
-    userLoanHistory = db.query(Loan).filter(Loan.user_id == user_id).all()
+    userLoanHistory = user_loan_history_admin(user_id = user_id, db = db)
     return success_response(
         data = [ LoanResponse.model_validate(i).model_dump(mode="json") for i in userLoanHistory]
     )
