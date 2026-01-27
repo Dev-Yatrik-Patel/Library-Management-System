@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.dependencies import require_roles
 from app.core.roles import Roles 
 from app.core.audit import log_audit
+from app.core.response import success_response
 
 from app.models.loan import Loan
 from app.models.user import User
@@ -72,7 +73,9 @@ def borrow_book(loan: LoanCreate,
     db.commit()
     db.refresh(new_loan)
     
-    return new_loan
+    return success_response(
+        data = LoanResponse.model_validate(new_loan).model_dump(mode="json")
+    )
 
 @router.post("return/{loan_id}", status_code= status.HTTP_200_OK)
 def return_book(loan_id : int,
@@ -104,20 +107,29 @@ def return_book(loan_id : int,
     
     db.commit()
     
-    return {"message": "Book return successfully!"}
+    return success_response(message="Book return successfully!")
 
 @router.get("/me", response_model=List[LoanResponse])
 def my_active_loans(db: Session = Depends(get_db),
              current_user: User = Depends(get_current_user)):
-    return db.query(Loan).filter(current_user.id == Loan.user_id, Loan.is_active == True).all()
+    activeLoanRecords = db.query(Loan).filter(current_user.id == Loan.user_id, Loan.is_active == True).all()
+    return success_response(
+        data = [ LoanResponse.model_validate(i).model_dump(mode="json") for i in activeLoanRecords]
+    )
 
 @router.get("/history", response_model=List[LoanResponse])
 def my_loan_history(db: Session = Depends(get_db),
              current_user: User = Depends(get_current_user)):
-    return db.query(Loan).filter(current_user.id == Loan.user_id).all()
+    historyLoanRecords = db.query(Loan).filter(current_user.id == Loan.user_id).all()
+    return success_response(
+        data = [ LoanResponse.model_validate(i).model_dump(mode="json") for i in historyLoanRecords]
+    )
 
 @router.get("/user/{user_id}",
             response_model=List[LoanResponse],
             dependencies=[Depends(require_roles(Roles.ADMIN,Roles.LIBRARIAN))])
 def user_loan_history(user_id: int, db: Session = Depends(get_db) ):
-    return db.query(Loan).filter(Loan.user_id == user_id).all()
+    userLoanHistory = db.query(Loan).filter(Loan.user_id == user_id).all()
+    return success_response(
+        data = [ LoanResponse.model_validate(i).model_dump(mode="json") for i in userLoanHistory]
+    )

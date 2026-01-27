@@ -29,7 +29,7 @@ def create_book(book: BookCreate, db: Session = Depends(get_db), user= Depends(r
     db.refresh(db_book_obj)
     
     return success_response(
-        data = db_book_obj
+        data = BookResponse.model_validate(db_book_obj).model_dump(mode="json")
     )
 
 
@@ -80,7 +80,8 @@ def get_books(
     books = query.offset(offset).limit(limit).all()
     
     return success_response(
-        data = BookResponse(books).model_dump()
+        data = 
+        [ BookResponse.model_validate(i).model_dump(mode="json") for i in books ]
     )
 
 @router.get("/{book_id}",response_model=BookResponse, 
@@ -90,8 +91,10 @@ def get_book_by_id(request: Request, bookid : int, db: Session = Depends(get_db)
     book = db.query(Book).filter(Book.id == bookid).first()
     if not book:
         raise BookNotFound()
-    return book
-
+    return success_response(
+            data = BookResponse.model_validate(book).model_dump(mode="json")
+        )
+    
 @router.put("/{book_id}", 
             response_model=BookUpdate )
 def update_book_by_id(bookid : int,
@@ -111,7 +114,9 @@ def update_book_by_id(bookid : int,
     db.commit()
     db.refresh(book)
     
-    return book
+    return success_response(
+            data = BookResponse.model_validate(book).model_dump(mode="json")
+        )
 
 @router.delete("/{book_id}")
 def delete_book(bookid : int,
@@ -126,4 +131,4 @@ def delete_book(bookid : int,
     db.delete(book)
     db.commit()
     
-    return {"message": "Book Deleted!"}
+    return success_response(message="Book Deleted!")

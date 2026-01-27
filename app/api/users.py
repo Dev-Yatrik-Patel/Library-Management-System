@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import List
@@ -18,6 +19,7 @@ from app.core.roles import Roles
 from app.core.dependencies import require_roles
 from app.core.database import get_db
 from app.core.audit import log_audit
+from app.core.response import success_response
 
 from app.exceptions.auth import AuthenticationError, AuthorizationError
 from app.exceptions.user import UserNotFound,UserLoanPending,UserEmailAlreadyExists
@@ -30,11 +32,13 @@ def get_audit_logs(
     db: Session = Depends(get_db),
     _ = Depends(require_roles(Roles.ADMIN))
 ):
-    return db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(100).all()
+    data = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(100).all()
+    return success_response(data = jsonable_encoder(data))
 
 @router.get("/me",response_model=UserResponse) 
 def get_my_info(current_user: User = Depends(get_current_user)):
-    return current_user
+    
+    return success_response(data = UserResponse.model_validate(current_user).model_dump(mode="json") )
 
 @router.put("/me",response_model=UserResponse)
 def update_my_profile(userupdateobj: UserUpdate, db: Session = Depends(get_db), current_user:User =  Depends(get_current_user)):
@@ -66,8 +70,8 @@ def update_my_profile(userupdateobj: UserUpdate, db: Session = Depends(get_db), 
     
     db.commit()
     db.refresh(current_user)
-    
-    return current_user
+
+    return success_response(data = UserResponse.model_validate(current_user).model_dump(mode="json") )
 
 @router.delete("/me")
 def delete_profile(
@@ -103,7 +107,7 @@ def delete_profile(
     
     db.commit()
     
-    return {"message": "Account deleted"}
+    return success_response(message="Account deleted")
 
 @router.post("/", 
              response_model=UserResponse, 
@@ -144,13 +148,16 @@ def create_user(user: UserCreate, db: Session = Depends(get_db), current_user = 
     db.commit()
     db.refresh(db_user)
     
-    return db_user
+    return success_response(data = UserResponse.model_validate(db_user).model_dump(mode="json"))
 
 @router.get("/", 
              response_model=List[UserResponse], 
              status_code=status.HTTP_200_OK)
 def get_all_users(db: Session = Depends(get_db),_= Depends(require_roles(Roles.ADMIN))):
-    return db.query(User).filter(User.is_active==True).all()
+    allUsers = db.query(User).filter(User.is_active==True).all()
+    return success_response(
+        data = [ UserResponse.model_validate(i).model_dump(mode="json") for i in allUsers]
+    )
 
 @router.get("/{userid}", 
              response_model=UserResponse, 
@@ -162,7 +169,8 @@ def get_user_by_id(userid: int, db:Session = Depends(get_db),_= Depends(require_
     if not user:
         raise UserNotFound()        
     
-    return user
+    return success_response(data = UserResponse.model_validate(user).model_dump(mode="json"))
+
 
 @router.put("/{userid}", response_model=UserResponse)
 def update_user_by_id(userid: int, 
@@ -203,7 +211,7 @@ def update_user_by_id(userid: int,
     db.commit()
     db.refresh(user)
     
-    return user
+    return success_response(data = UserResponse.model_validate(user).model_dump(mode="json"))
 
 @router.delete("/{userid}")
 def delete_user(userid: int, db:Session = Depends(get_db), current_user: User = Depends(get_current_user),_=Depends(require_roles(Roles.ADMIN))):
@@ -242,5 +250,5 @@ def delete_user(userid: int, db:Session = Depends(get_db), current_user: User = 
     
     db.commit()
     
-    return {"message": "User Deleted!"}
+    return success_response(message="User Deleted!")
 

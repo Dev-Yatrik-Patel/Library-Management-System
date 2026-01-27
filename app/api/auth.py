@@ -95,13 +95,11 @@ def login(
 
     db.commit()
         
-    return success_response(
-        data = {
-            "access_token" : access_token,
-            "refresh_token" : refresh_token_value,
-            "token_type": "bearer"
-        }
-    )
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token_value,
+        "token_type": "bearer"
+    }
 
 
 @router.get("/me")
